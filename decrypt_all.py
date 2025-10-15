@@ -7,7 +7,6 @@ import re
 def decrypt_all(wx_paths, goal_path):
     with open("wxinfo.json", "r", encoding="utf-8") as f:
         key = json.load(f).get("key")
-    pattern = re.compile(r'^(?P<base>.+)_(?P<num>\d+)\.db$', re.IGNORECASE)
     for root, dirs, files in os.walk(wx_paths):
         for filename in files:
             if filename.endswith(".db"):

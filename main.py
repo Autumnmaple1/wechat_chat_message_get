@@ -6,6 +6,7 @@ import sqlite3
 import hashlib
 import zstandard as zstd
 import decrypt_all
+import re
 
 def decompress(data):
     try:
@@ -97,7 +98,6 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
         cursor_contact = conn_contact.cursor()
 
         result = []
-        seen_server_ids = set()
 
         for num, dbpath in db_files:
             try:
@@ -111,36 +111,55 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
                     conn_message.close()
                     continue
 
-                cursor_message.execute(f"SELECT server_id, local_type, real_sender_id, create_time, message_content FROM {table_name}")
+                cursor_message.execute(f"SELECT sort_seq, local_type, real_sender_id, create_time, message_content FROM {table_name}")
                 rows = cursor_message.fetchall()
 
                 for row in rows:
-                    server_id, local_type, real_sender_id, create_time, message_content = row
-
-                    # 去重：如果已经见过相同 server_id，则跳过
-                    if server_id in seen_server_ids:
-                        continue
+                    sort_seq, local_type, real_sender_id, create_time, message_content = row
 
                     # 跳过 local_type > 100 的数据
-                    if local_type > 100:
-                        continue
                     if local_type == 47:
                         message_content = "[表情包]"
+                    
+                    if local_type == 34:
+                        message_content = "[语音]"
 
+                    if local_type == 43:
+                        message_content = "[视频]"
+                        
+                    if local_type == 8594229559345:
+                        message_content = "[红包]"
+                        
                     if local_type == 15 or local_type == 3:
                         message_content = "[图片]"
-
+                    
+                    if local_type == 244813135921:
+                        message_content = decompress(message_content)
+                        xml_string = message_content
+                        title_match = re.search(r'<title>(.*?)</title>', xml_string)
+                        if title_match:
+                            first_title = title_match.group(1)
+                            print(f"第一个title: {first_title}")
+                        content_match = re.search(r'<content>(.*?)</content>', xml_string)
+                        if content_match:
+                            first_content = content_match.group(1)
+                            print(f"第一个content: {first_content}")
+                    
+                    if local_type > 100 and not isinstance(message_content, str):
+                        continue
                     # 如果 message_content 不是字符串格式，尝试解压
                     if not isinstance(message_content, str):
                         message_content = decompress(message_content)
-
+                    message_content = message_content.split(':\n', 1)[-1] if ':\n' in message_content else message_content
+                    
                     # 处理 message_content，去掉类似 'wxid_1jauivdztqzt22:\n' 的部分
                     wxid = None
                     cursor_message.execute("SELECT user_name FROM Name2Id WHERE rowid = ?", (real_sender_id,))
                     wxid = cursor_message.fetchone()
+                    
                     if wxid:
                         wxid = wxid[0]
-                    message_content = message_content.split(':\n', 1)[-1] if ':\n' in message_content else message_content
+                    
 
                     # 如果 wxid 仍然为 None，使用 main_wxid
                     if wxid is None:
@@ -162,14 +181,11 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
                     result.append({
                         "nickname": nickname,
                         "wxid": wxid,
-                        "server_id": server_id,
                         "Local_type": local_type,
                         "Timestamp": create_time,
+                        "sort_seq": sort_seq,
                         "Text": message_content,
                     })
-
-                    seen_server_ids.add(server_id)
-
                 conn_message.close()
             except sqlite3.Error as e:
                 print(f"读取数据库 {dbpath} 出错: {e}")
@@ -188,7 +204,7 @@ if __name__ == "__main__":
     main_wxid = wxpath_get.get_wxids()[0]
     contact_path = os.path.join(os.getcwd(), main_wxid, "db_storage\\contact\\contact.db")
     message_path = os.path.join(os.getcwd(), main_wxid, "db_storage\\message\\message_0.db")    
-    decrypt_all.decrypt_all(paths, os.path.join(os.getcwd(), main_wxid))
+    #decrypt_all.decrypt_all(paths, os.path.join(os.getcwd()))
     with open("wxinfo.json", "r", encoding="utf-8") as f:
         group_name = json.load(f).get("group_name", None)
     wxids = get_group_wxid(contact_path, group_name)
