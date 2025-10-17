@@ -37,6 +37,25 @@ def parse_message_and_reply(xml_content):
         }
     except ET.ParseError as e:
         print(f"XML 解析错误: {e}")
+        with open("error_log.txt", "a", encoding="utf-8") as log_file:
+            log_file.write(f"XML 解析错误: {e}\n内容: {xml_content}\n\n")
+        return None
+def parse_message_share_card(xml_content):
+    """
+    从 XML 格式内容中解析分享的卡片信息。
+
+    :param xml_content: XML 格式的字符串
+    :return: 卡片信息标题
+    """
+    try:
+        root = ET.fromstring(xml_content)
+        # 提取卡片信息
+        content = root.findtext(".//title", default="").strip()
+        return content
+    except ET.ParseError as e:
+        print(f"XML 解析错误: {e}")
+        with open("error_log.txt", "a", encoding="utf-8") as log_file:
+            log_file.write(f"XML 解析错误: {e}\n内容: {xml_content}\n\n")
         return None
 
 def decompress(data):
@@ -47,36 +66,59 @@ def decompress(data):
     except:
         return ''
 
-def message_process(message_content, local_type):
+def message_process(message_content, local_type, wxid):
     # 处理 message_content，去掉类似 'wxid_1jauivdztqzt22:\n' 的部分
+    if not isinstance(message_content, str):
+        message_content = decompress(message_content)
+
+    if isinstance(message_content, str) and message_content.startswith(wxid+':\n'):
+        message_content = message_content.split(wxid+':\n', 1)[-1]
+        
+    with open("debug_log.txt", "a", encoding="utf-8") as log_file:
+        log_file.write(f"local_type: {local_type}, message_content: {message_content}\n")
+    
+    if local_type == 1:
+        return message_content
+    
     if local_type == 47:
         message_content = "[表情包]"
+        return message_content
         
     if local_type == 34:
         message_content = "[语音]"
+        return message_content
 
     if local_type == 43:
         message_content = "[视频]"
+        return message_content
         
     if local_type == 8594229559345:
         message_content = "[红包]"
+        return message_content
         
     if local_type == 15 or local_type == 3:
         message_content = "[图片]"
+        return message_content
     
     if local_type == 244813135921:
-        message_content = decompress(message_content)
         reply = parse_message_and_reply(message_content)
-        message_content = reply["message_content"] + "  [回复]" + reply["reply_content"]
-
-    if local_type > 100 and not isinstance(message_content, str):
-        return "[未知格式消息]" # Use return instead of continue, since continue is invalid outside a loop
-    # 如果 message_content 不是字符串格式，尝试解压
-    if not isinstance(message_content, str):
-        message_content = decompress(message_content)
-    message_content = message_content.split(':\n', 1)[-1] if ':\n' in message_content else message_content
+        message_content = reply["message_content"] + f"  [回复server_id=={reply['reply_content']}]"
+        return message_content
     
-    return message_content
+    if local_type == 21474836529:
+        content = parse_message_share_card(message_content)
+        message_content = "[卡片分享] "+content
+        return message_content
+    
+    if local_type == 10000:
+        return "[系统消息]"
+    
+    return "[未知格式消息]"
+    # 如果 message_content 不是字符串格式，尝试解压
+    # 去掉 wxid 开头且有 :\n 的内容
+
+    
+    
 
 def process_message_table(message_db_path, contact_db_path, group_wxid):
     """
@@ -144,7 +186,7 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
                 for row in rows:
                     sort_seq, local_type, real_sender_id, create_time, message_content, server_id = row
 
-                    message_content = message_process(message_content, local_type)
+                    
                     wxid = None
                     cursor_message.execute("SELECT user_name FROM Name2Id WHERE rowid = ?", (real_sender_id,))
                     wxid = cursor_message.fetchone()
@@ -157,8 +199,9 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
                     if wxid is None:
                         wxid = main_wxid
                         wxid = wxid.split("_", 2)[0]+'_'+wxid.split("_", 2)[1]
-
-                    # 查询 contact 表获取 nickname
+                    
+                    message_content = message_process(message_content, local_type, wxid)
+                    
                     nickname = None
                     if wxid:
                         cursor_contact.execute("SELECT remark FROM contact WHERE username = ?", (wxid,))
