@@ -18,7 +18,7 @@ def md5_encrypt(value):
     """
     return hashlib.md5(value.encode('utf-8')).hexdigest()
 
-def parse_message_and_reply(xml_content):
+def parse_xml(xml_content, compstr, type):
     """
     从 XML 格式内容中解析消息内容与对应的回复。
 
@@ -28,30 +28,11 @@ def parse_message_and_reply(xml_content):
     try:
         root = ET.fromstring(xml_content)
         # 提取消息内容
-        reply_content = root.findtext(".//refermsg/svrid", default="").strip()
-        # 提取回复内容
-        message_content = root.findtext(".//title", default="").strip()
-        return {
-            "message_content": message_content,
-            "reply_content": reply_content
-        }
-    except ET.ParseError as e:
-        print(f"XML 解析错误: {e}")
-        with open("error_log.txt", "a", encoding="utf-8") as log_file:
-            log_file.write(f"XML 解析错误: {e}\n内容: {xml_content}\n\n")
-        return None
-def parse_message_share_card(xml_content):
-    """
-    从 XML 格式内容中解析分享的卡片信息。
-
-    :param xml_content: XML 格式的字符串
-    :return: 卡片信息标题
-    """
-    try:
-        root = ET.fromstring(xml_content)
-        # 提取卡片信息
-        content = root.findtext(".//title", default="").strip()
-        return content
+        if type == "1":
+            reply_content = root.findtext(compstr, default="").strip()
+        if type == "2":
+            reply_content = root.get(compstr)
+        return reply_content
     except ET.ParseError as e:
         print(f"XML 解析错误: {e}")
         with open("error_log.txt", "a", encoding="utf-8") as log_file:
@@ -93,7 +74,7 @@ def message_process(message_content, local_type, wxid):
         return message_content
         
     if local_type == 8594229559345:
-        message_content = "[红包]"
+        message_content = "[微信红包]"
         return message_content
         
     if local_type == 15 or local_type == 3:
@@ -101,15 +82,27 @@ def message_process(message_content, local_type, wxid):
         return message_content
     
     if local_type == 244813135921:
-        reply = parse_message_and_reply(message_content)
-        message_content = reply["message_content"] + f"  [回复server_id=={reply['reply_content']}]"
+        reply = parse_xml(message_content,".//refermsg/svrid",1)
+        info = parse_xml(message_content,".//title",1)
+        message_content = info + f"  [回复server_id=={reply}]"
         return message_content
     
     if local_type == 21474836529:
-        content = parse_message_share_card(message_content)
+        content = parse_xml(message_content,".//title",1)
         message_content = "[卡片分享] "+content
         return message_content
     
+    if local_type == 8589934592049:
+        message_content = "[微信转账]"
+        return message_content
+    
+    if local_type == 141733920817:
+        message_content = "[小程序] " + parse_xml(message_content,".//title",1)
+        return message_content
+    
+    if local_type == 42:
+        message_content = "[名片]"
+        return message_content
     if local_type == 10000:
         return "[系统消息]"
     
