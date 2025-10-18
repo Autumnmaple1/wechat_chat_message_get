@@ -92,11 +92,6 @@ def message_process(message_content, local_type, wxid):
         message_content = "[卡片分享] "+content
         return message_content
     
-    if local_type == 17179869233:
-        content = parse_xml(message_content,".//title",1)
-        message_content = "[卡片分享] " + content
-        return message_content
-    
     if local_type == 8589934592049:
         message_content = "[微信转账]"
         return message_content
@@ -106,7 +101,7 @@ def message_process(message_content, local_type, wxid):
         return message_content
     
     if local_type == 42:
-        message_content = "[名片] " + parse_xml(message_content,"nickname",2)
+        message_content = "[名片]"
         return message_content
     if local_type == 10000:
         return "[系统消息]"
