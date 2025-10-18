@@ -8,6 +8,8 @@ import zstandard as zstd
 import decrypt_all
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
+
 
 def md5_encrypt(value):
     """
@@ -126,6 +128,17 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
     md5_wxid = md5_encrypt(group_wxid)
     table_name = f"Msg_{md5_wxid}"
     main_wxid = wxpath_get.get_wxids()[0]
+    time = datetime.now().strftime("%Y-%m-%d")
+    result.append({
+        "meta_data": {
+            "platform": 'wechat',
+            "datatype": 'message',
+            "collection_date": time,
+            "collector": "Yiming",
+            "version": "1.0"
+        },
+        "data": []
+    })
     try:
         # message_db_path 指向 message_0.db 或同目录下的任意 message_x.db
         msg_dir = os.path.dirname(message_db_path)
@@ -206,7 +219,7 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
                             nickname = nickname_row[0] if nickname_row else None
 
                     # 构造 JSON 数据并加入结果
-                    result.append({
+                    result['data'].append({
                         "nickname": nickname,
                         "wxid": wxid,
                         "Local_type": local_type,
