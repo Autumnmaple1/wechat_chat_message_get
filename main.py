@@ -41,7 +41,7 @@ if __name__ == "__main__":
     main_wxid = wxpath_get.get_wxids()[0]
     contact_path = os.path.join(os.getcwd(), main_wxid, "db_storage\\contact\\contact.db")
     message_path = os.path.join(os.getcwd(), main_wxid, "db_storage\\message\\message_0.db")    
-    decrypt_all.decrypt_all(paths, os.path.join(os.getcwd()))
+    #decrypt_all.decrypt_all(paths, os.path.join(os.getcwd()))
     with open("wxinfo.json", "r", encoding="utf-8") as f:
         group_name = json.load(f).get("group_name", None)
     wxids = get_group_wxid(contact_path, group_name)

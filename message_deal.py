@@ -36,10 +36,7 @@ def parse_xml(xml_content, compstr, type):
             reply_content = root.get(compstr)
         return reply_content
     except ET.ParseError as e:
-        print(f"XML 解析错误: {e}")
-        with open("error_log.txt", "a", encoding="utf-8") as log_file:
-            log_file.write(f"XML 解析错误: {e}\n内容: {xml_content}\n\n")
-        return None
+        return xml_content
 
 def decompress(data):
     try:
@@ -60,55 +57,63 @@ def message_process(message_content, local_type, wxid):
     with open("debug_log.txt", "a", encoding="utf-8") as log_file:
         log_file.write(f"local_type: {local_type}, message_content: {message_content}\n")
     
-    if local_type == 1:
-        return message_content
+    replys = {
+        "type_description": None,
+        "message_content": None,
+        "quote_id": None
+    }
     
+    if local_type == 1:
+        replys["type_description"] = "文本"
+        replys["message_content"] = message_content
+
     if local_type == 47:
-        message_content = "[表情包]"
-        return message_content
+        replys["type_description"] = "表情包"
+        replys["message_content"] = "[表情包]"
         
     if local_type == 34:
-        message_content = "[语音]"
-        return message_content
+        replys["type_description"] = "语音"
+        replys["message_content"] = "[语音]"
 
     if local_type == 43:
-        message_content = "[视频]"
-        return message_content
+        replys["type_description"] = "视频"
+        replys["message_content"] = "[视频]"
         
     if local_type == 8594229559345:
-        message_content = "[微信红包]"
-        return message_content
-        
+        replys["type_description"] = "微信红包"
+        replys["message_content"] = "[微信红包]"
+
     if local_type == 15 or local_type == 3:
-        message_content = "[图片]"
-        return message_content
-    
+        replys["type_description"] = "图片"
+        replys["message_content"] = "[图片]"
+
     if local_type == 244813135921:
-        reply = parse_xml(message_content,".//refermsg/svrid",1)
-        info = parse_xml(message_content,".//title",1)
-        message_content = info + f"  [回复server_id=={reply}]"
-        return message_content
+        replys["type_description"] = "带引用消息"
+        replys["quote_id"] = parse_xml(message_content,".//refermsg/svrid",1)
+        replys["message_content"] = parse_xml(message_content,".//title",1)
     
     if local_type == 21474836529:
-        content = parse_xml(message_content,".//title",1)
-        message_content = "[卡片分享] "+content
-        return message_content
-    
+        replys["message_content"] = parse_xml(message_content,".//title",1)
+        replys["type_description"] = "卡片分享"
+
     if local_type == 8589934592049:
-        message_content = "[微信转账]"
-        return message_content
-    
+        replys["type_description"] = "微信转账"
+        replys["message_content"] = "[微信转账]"
+
     if local_type == 141733920817:
-        message_content = "[小程序] " + parse_xml(message_content,".//title",1)
-        return message_content
-    
+        replys["type_description"] = "小程序"
+        replys["message_content"] = parse_xml(message_content,".//title",1)
+
     if local_type == 42:
-        message_content = "[名片]"
-        return message_content
-    if local_type == 10000:
-        return "[系统消息]"
+        replys["type_description"] = "名片"
+        replys["message_content"] = parse_xml(message_content,"nickname",2)
+        
     
-    return "[未知格式消息]"
+    if local_type == 10000:
+        replys["type_description"] = "系统消息"
+        replys["message_content"] = parse_xml(message_content,".//content",1)
+        
+    return replys   
     # 如果 message_content 不是字符串格式，尝试解压
     # 去掉 wxid 开头且有 :\n 的内容
 
@@ -129,7 +134,7 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
     table_name = f"Msg_{md5_wxid}"
     main_wxid = wxpath_get.get_wxids()[0]
     time = datetime.now().strftime("%Y-%m-%d")
-    result.append({
+    result = {
         "meta_data": {
             "platform": 'wechat',
             "datatype": 'message',
@@ -138,7 +143,7 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
             "version": "1.0"
         },
         "data": []
-    })
+    }
     try:
         # message_db_path 指向 message_0.db 或同目录下的任意 message_x.db
         msg_dir = os.path.dirname(message_db_path)
@@ -172,7 +177,7 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
         conn_contact = sqlite3.connect(contact_db_path)
         cursor_contact = conn_contact.cursor()
 
-        result = []
+
 
         for num, dbpath in db_files:
             try:
@@ -219,14 +224,16 @@ def process_message_table(message_db_path, contact_db_path, group_wxid):
                             nickname = nickname_row[0] if nickname_row else None
 
                     # 构造 JSON 数据并加入结果
-                    result['data'].append({
-                        "nickname": nickname,
+                    result["data"].append({
+                        "server_id": str(server_id),
+                        "sender_name": nickname,
                         "wxid": wxid,
-                        "Local_type": local_type,
-                        "Timestamp": create_time,
+                        "local_type": local_type,
+                        "type_description": message_content["type_description"],
+                        "send_at": create_time,
                         "sort_seq": sort_seq,
-                        "server_id": server_id,
-                        "Text": message_content,
+                        "content": message_content["message_content"],
+                        "quote_id": message_content["quote_id"]
                     })
                 conn_message.close()
             except sqlite3.Error as e:
